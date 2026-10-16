@@ -11,7 +11,11 @@ import 'publish_delay.dart';
 
 /// Shared authorization and publishing logic for a single in-memory app scope.
 class BlogService {
-  BlogService({required this._repository, required this._session, this._delay = const PublishDelay()});
+  BlogService({
+    required this._repository,
+    required this._session,
+    this._delay = const PublishDelay(),
+  });
   final PublishDelay _delay;
   final PostRepository _repository;
   final CurrentUserSession _session;
@@ -116,24 +120,34 @@ class BlogService {
     final lookup = _recordFor(requestId);
     if (lookup case BlogFailure()) return Future.value(lookup);
     final record = (lookup as BlogSuccess<PublishRecord>).value;
-    if (record.terminalResult != null) return Future.value(record.terminalResult!);
+    if (record.terminalResult != null) {
+      return Future.value(record.terminalResult!);
+    }
     if (record.inFlight != null) return record.inFlight!;
     record.confirmedByUser = true;
     record.phase = PublishPhase.executing;
     return _start(requestId, record);
   }
 
-  Future<BlogResult<PublishReceipt>> _start(String requestId, PublishRecord record) {
+  Future<BlogResult<PublishReceipt>> _start(
+    String requestId,
+    PublishRecord record,
+  ) {
     final completer = Completer<BlogResult<PublishReceipt>>();
     record.inFlight = completer.future;
     Future.sync(() => _execute(requestId, record)).then((result) {
-      if (record.terminalResult == null && result is BlogFailure) _reject(record, result);
+      if (record.terminalResult == null && result is BlogFailure) {
+        _reject(record, result);
+      }
       completer.complete(result);
     }, onError: completer.completeError);
     return completer.future;
   }
 
-  Future<BlogResult<PublishReceipt>> _execute(String requestId, PublishRecord record) async {
+  Future<BlogResult<PublishReceipt>> _execute(
+    String requestId,
+    PublishRecord record,
+  ) async {
     await _delay.beforeCommit();
     final result = _confirm(requestId);
     if (result is BlogSuccess<PublishReceipt>) {
@@ -209,13 +223,21 @@ class BlogService {
     String requestId,
     int postId,
   ) {
-    if (postId <= 0 || requestId.isEmpty) return Future.value(_publishFailure(BlogErrorCode.invalidArguments));
+    if (postId <= 0 || requestId.isEmpty) {
+      return Future.value(_publishFailure(BlogErrorCode.invalidArguments));
+    }
     final lookup = _recordFor(requestId);
     if (lookup case BlogFailure()) return Future.value(lookup);
     final record = (lookup as BlogSuccess<PublishRecord>).value;
-    if (record.fingerprint.postId != postId) return Future.value(_publishFailure(BlogErrorCode.requestConflict));
-    if (record.terminalResult != null) return Future.value(record.terminalResult!);
-    if (!record.confirmedByUser) return Future.value(_publishFailure(BlogErrorCode.confirmationRequired));
+    if (record.fingerprint.postId != postId) {
+      return Future.value(_publishFailure(BlogErrorCode.requestConflict));
+    }
+    if (record.terminalResult != null) {
+      return Future.value(record.terminalResult!);
+    }
+    if (!record.confirmedByUser) {
+      return Future.value(_publishFailure(BlogErrorCode.confirmationRequired));
+    }
     return record.inFlight ?? _start(requestId, record);
   }
 }

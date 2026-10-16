@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../domain/app_user.dart';
 import '../domain/blog_result.dart';
 import '../domain/post.dart';
+import '../application/publish_delay.dart';
 import 'cubit/blog_cubit.dart';
 import 'cubit/blog_state.dart';
 
 class BlogPage extends StatefulWidget {
-  const BlogPage({super.key});
+  const BlogPage({super.key, this.demoDelay});
+  final DemoPublishDelay? demoDelay;
   @override
   State<BlogPage> createState() => _BlogPageState();
 }
@@ -113,6 +116,33 @@ class _BlogPageState extends State<BlogPage> {
                   const Text('یک کاربر آزمایشی انتخاب کنید.'),
                 if (state.phase == BlogPhase.loading)
                   const LinearProgressIndicator(),
+                if (kDebugMode && widget.demoDelay != null)
+                  DropdownButton<PublishDemoMode>(
+                    key: const Key('demo-delay'),
+                    value: widget.demoDelay!.mode,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                        value: PublishDemoMode.normal,
+                        child: Text('دمو: بدون تأخیر'),
+                      ),
+                      DropdownMenuItem(
+                        value: PublishDemoMode.beforeCommit,
+                        child: Text('دمو: تأخیر قبل از ثبت'),
+                      ),
+                      DropdownMenuItem(
+                        value: PublishDemoMode.afterCommit,
+                        child: Text('دمو: تأخیر پاسخ پس از ثبت'),
+                      ),
+                    ],
+                    onChanged: state.pending != null
+                        ? null
+                        : (mode) {
+                            if (mode != null) {
+                              setState(() => widget.demoDelay!.mode = mode);
+                            }
+                          },
+                  ),
                 if (state.failure != null)
                   Text(
                     _errorMessage(
@@ -125,6 +155,20 @@ class _BlogPageState extends State<BlogPage> {
                   const Text('پست با موفقیت منتشر شد.'),
                 if (state.phase == BlogPhase.cancelled)
                   const Text('انتشار لغو شد.'),
+                if (state.phase == BlogPhase.unknownOutcome) ...[
+                  Text(
+                    'نتیجهٔ انتشار نامعلوم است؛ ممکن است انجام شده باشد.\nدرخواست: ${state.pending!.requestId}',
+                    key: const Key('unknown-outcome'),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton(
+                      key: const Key('publish-retry'),
+                      onPressed: cubit.retry,
+                      child: const Text('پیگیری / Retry'),
+                    ),
+                  ),
+                ],
                 if (state.selectedPost != null)
                   Align(
                     alignment: Alignment.centerRight,

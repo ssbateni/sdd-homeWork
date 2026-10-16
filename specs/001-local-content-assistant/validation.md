@@ -231,3 +231,74 @@ T019 تا T030 تکمیل شدند. T031 تا T044 باز هستند؛ retryPubl
 adapter مدل و MCP پیاده نشده‌اند. CurrentUserSession از رفتار epoch موجود استفاده می‌کند؛
 نیازی به تغییر آن در T026 نبود. Constitution، Baseline، Spec، Plan، قراردادهای مستند،
 چک‌لیست و وابستگی‌ها تغییر نکردند. Commit انجام نشد.
+
+## T031 تا T044 — Retry و تکمیل P1 (2026-10-16)
+
+- پیش‌نیاز T030 انجام شده؛ چک‌لیست ۱۶/۱۶ قبول و هیچ پیش‌نیاز باز خارج از بازه وجود ندارد.
+- T031 red: پنج شکست assertion و دو رگرسیون موفق با stub؛ T032 green: هر هفت تست موفق.
+- Future درخواست پیش از هر await در ledger ثبت می‌شود؛ actor/post/operation و مجوز هنگام
+  Retry کنترل و success پیشین قبل از بررسی published بازیابی می‌شود. Retry بدون تأیید رد می‌شود.
+- T033 red: هر پنج تست gate تأخیر شکست assertion خوردند (عملیات زودتر از gate commit می‌کرد).
+- T034 green: هر ۱۲ تست Retry/Timeout موفق؛ مهلت انتظار فقط Future مشاهده‌کننده را قطع
+  می‌کند. تست با Completer و timeout صفر انجام شده و خواب واقعی چندثانیه‌ای ندارد.
+- Timeout پیش از commit: همان Future برای Retryهای هم‌زمان، شمار write نهایی ۱.
+- Timeout پس از commit: receipt قبلی پیش از بازشدن gate پاسخ بازیابی و شمار write همان ۱.
+- لغو، تعویض هویت، تغییر approval و تغییر context در gate قبل از commit همگی write صفر دارند.
+- T035 red: سه شکست assertion (publishing به‌جای unknownOutcome). T036 red: دو شکست رابط
+  به‌علت نبود نتیجهٔ نامعلوم و Retry؛ پس از T037/T038 سه تست Cubit و دو تست اولیهٔ Widget موفق شدند.
+- مهلت پیش‌فرض ۲ ثانیه، delay debug برابر ۳ ثانیه؛ تست‌ها زمان صفر یا ساعت مجازی Widget دارند.
+- T039 یک رگرسیون سبز و یک شکست واقعی نشان داد: سازندهٔ Cubit با refresh بی‌دلیل context
+  تأیید قبلی را invalidate می‌کرد. بارگذاری اولیه از refresh صریح جدا شد؛ scope/ledger reset نمی‌شوند.
+- T040 هر دو سناریوی D7 با کنترل واقعی دمو در ContentAssistantApp خودکار اجرا شدند: Timeout
+  پیش/پس از commit، همان requestId و Retry تا published؛ dispose کامل ریشه و ایجاد تازه، 101
+  را به draft بازگرداند. دو تست سرویس gate شمار write را دقیقاً ۱ ثبت کردند؛ retry خواندن write تازه نداشت.
+- این شواهد تضمین same-process/same-run هستند؛ persistence یا تضمین بین چند process نداریم.
+- T041: importهای domain/application/data فقط Dart و قرارداد داخلی‌اند؛ presentation هیچ
+  PostRepository/replacePublished یا قاعدهٔ انتشار تکراری ندارد. متن Injection فقط content است.
+  جست‌وجوی کلید/توکن در lib نتیجه‌ای نداشت و ignoreهای .env/build/.dart_tool تأیید شدند.
+- معماری P1: Widget → Cubit (انتظار و نمایش) → BlogService (هویت معتبر، مجوز، تأیید و ledger)
+  → PostRepository حافظه‌ای. Cubit/Widget به مسیر نوشتن داده دسترسی ندارند.
+- تغییر وضعیت و success در یک قطعهٔ همگام همان isolate ثبت می‌شوند؛ delayها بیرون آن‌اند.
+  ذخیره‌سازی پایدار، مدل واقعی، Tool Calling و MCP در این تحویل وجود ندارند.
+
+### بررسی نهایی T042 تا T044
+
+| فرمان از ریشه | نتیجه |
+| --- | --- |
+| `dart test test/unit/blog --reporter expanded` | ۵۸ تست موفق |
+| `dart test test/cubit --reporter expanded` | ۱۲ تست موفق |
+| `flutter test test/widget --reporter expanded` | ۱۴ تست موفق |
+| `flutter analyze --no-pub` | بدون مشکل |
+| `flutter run -d windows --no-resident --no-pub` | ساخت debug و راه‌اندازی Windows موفق |
+
+مجموع ۸۴ تست بدون مدل یا سرویس بیرونی موفق شدند. راهنمای اجرا با پروژهٔ موجود، وابستگی‌های
+قفل‌شده و کنترل‌های واقعی دمو تطبیق داده شد. تأیید کاربر برای یک درخواست و snapshot است؛
+Retry تأیید جدید ایجاد نمی‌کند و نتیجهٔ دیررس به معنی شکست قطعی عملیات نیست.
+
+محدودیت T044: ابزار Computer Use دسترسی به پنجره را با پیام
+`Computer Use was not approved to use local_content_assistant` رد کرد. هیچ کلیک دسکتاپی
+انجام نشد؛ انتخاب/مشاهده، رد انتشار، تأیید/لغو و دو Timeout روی پنجرهٔ Windows به‌صورت دستی
+تأیید نشده‌اند. پوشش خودکار آن‌ها در unit/Cubit/Widget است؛ موفقیت ساخت و راه‌اندازی
+جای بررسی تعاملی را نمی‌گیرد. T044 مطابق شاخهٔ «گزارش دقیق مانع محیط» بسته شده است.
+
+فایل‌های تغییرکرده در این بازه:
+
+- `lib/app/app.dart`
+- `lib/features/blog/application/blog_service.dart`
+- `lib/features/blog/application/publish_delay.dart`
+- `lib/features/blog/presentation/blog_page.dart`
+- `lib/features/blog/presentation/cubit/blog_cubit.dart`
+- `lib/features/blog/presentation/cubit/blog_state.dart`
+- `test/unit/blog/blog_publish_retry_test.dart`
+- `test/unit/blog/blog_publish_timeout_test.dart`
+- `test/unit/blog/blog_scope_lifetime_test.dart`
+- `test/cubit/blog_retry_cubit_test.dart`
+- `test/widget/blog_retry_page_test.dart`
+- `test/support/gate_publish_delay.dart`
+- `test/support/publish_fixture.dart`
+- `specs/001-local-content-assistant/quickstart.md`
+- `specs/001-local-content-assistant/tasks.md`
+- `specs/001-local-content-assistant/validation.md`
+
+T031 تا T044 بررسی و علامت‌گذاری شدند؛ پیش‌نیاز انجام‌نشده‌ای بیرون بازه وجود نداشت.
+Constitution و Baseline و اسناد نیازمندی/طراحی تغییر نکردند. P2/P3 اجرا نشده‌اند و Commit انجام نشد.

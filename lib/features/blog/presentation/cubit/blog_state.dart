@@ -12,6 +12,7 @@ enum BlogPhase {
   publishing,
   success,
   cancelled,
+  unknownOutcome,
 }
 
 final class BlogState {

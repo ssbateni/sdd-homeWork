@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc/bloc.dart';
 
 import '../../application/blog_service.dart';
@@ -9,14 +11,28 @@ import '../../domain/publish_request.dart';
 import 'blog_state.dart';
 
 class BlogCubit extends Cubit<BlogState> {
-  BlogCubit({required this._service, required this._session})
-    : super(BlogState()) {
-    refresh();
+  BlogCubit({
+    required this._service,
+    required this._session,
+    this._waitLimit = const Duration(seconds: 2),
+  }) : super(BlogState()) {
+    _loadVisible();
   }
   final BlogService _service;
   final CurrentUserSession _session;
+  final Duration _waitLimit;
   int _generation = 0;
+  int _waitAttempt = 0;
   List<AppUser> get availableUsers => _session.availableUsers;
+  Future<void> retry() async {
+    final pending = state.pending;
+    if (pending == null || state.phase != BlogPhase.unknownOutcome) return;
+    await _wait(
+      pending,
+      _service.retryPublish(pending.requestId, pending.postId),
+    );
+  }
+
   void requestPublish() {
     final post = state.selectedPost;
     if (post == null ||
@@ -37,10 +53,31 @@ class BlogCubit extends Cubit<BlogState> {
     if (pending == null || state.phase != BlogPhase.awaitingConfirmation) {
       return;
     }
+    await _wait(pending, _service.confirmPublish(pending.requestId));
+  }
+
+  Future<void> _wait(
+    PendingPublish pending,
+    Future<BlogResult<PublishReceipt>> operation,
+  ) async {
     final generation = _generation;
+    final attempt = ++_waitAttempt;
+    bool isCurrent() =>
+        !isClosed &&
+        generation == _generation &&
+        attempt == _waitAttempt &&
+        state.pending?.requestId == pending.requestId;
     _publishState(BlogPhase.publishing, pending: pending);
-    final result = await _service.confirmPublish(pending.requestId);
-    if (isClosed || generation != _generation) return;
+    late final BlogResult<PublishReceipt> result;
+    try {
+      result = await operation.timeout(_waitLimit);
+    } on TimeoutException {
+      if (isCurrent()) {
+        _publishState(BlogPhase.unknownOutcome, pending: pending);
+      }
+      return;
+    }
+    if (!isCurrent()) return;
     final postsResult = _service.listVisiblePosts();
     final postResult = _service.getPost(pending.postId);
     emit(
@@ -133,6 +170,10 @@ class BlogCubit extends Cubit<BlogState> {
   void refresh() {
     _generation++;
     _session.invalidatePendingContext();
+    _loadVisible();
+  }
+
+  void _loadVisible() {
     final user = _session.currentUser;
     if (user == null) {
       emit(BlogState());

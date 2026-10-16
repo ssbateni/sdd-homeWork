@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../features/blog/application/blog_service.dart';
 import '../features/blog/application/current_user_session.dart';
+import '../features/blog/application/publish_delay.dart';
 import '../features/blog/data/in_memory_post_repository.dart';
 import '../features/blog/data/sample_data.dart';
 import '../features/blog/presentation/blog_page.dart';
@@ -18,6 +20,7 @@ class ContentAssistantApp extends StatefulWidget {
 class _ContentAssistantAppState extends State<ContentAssistantApp> {
   late final CurrentUserSession _session;
   late final BlogService _service;
+  final _demoDelay = DemoPublishDelay();
   @override
   void initState() {
     super.initState();
@@ -25,6 +28,7 @@ class _ContentAssistantAppState extends State<ContentAssistantApp> {
     _service = BlogService(
       repository: InMemoryPostRepository(samplePosts()),
       session: _session,
+      delay: kDebugMode ? _demoDelay : const PublishDelay(),
     );
   }
 
@@ -34,7 +38,7 @@ class _ContentAssistantAppState extends State<ContentAssistantApp> {
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'دستیار محلی انتشار محتوا',
-      home: const BlogPage(),
+      home: BlogPage(demoDelay: kDebugMode ? _demoDelay : null),
     ),
   );
 }
